@@ -3,14 +3,45 @@
     <el-header>socketio</el-header>
 
     <el-container>
+      <!--已登录-->
       <template v-if="user.userid">
-        <el-aside width="200px">用户列表</el-aside>
+        <el-aside width="200px">
+          <el-header>
+              <span style="margin-right: 5px">在线用户列表</span>
+              <el-button size="small" @click="logout">退出登录</el-button>
+          </el-header>
+
+          <ul>
+            <li v-for="item in userList" :key="item.id">{{item.username}}</li>
+          </ul>
+        </el-aside>
         <el-container>
-          <el-main>{{ user }}</el-main>
-          <el-footer>输入区域</el-footer>
+          <el-main>
+            <el-row v-if="messageList.length">
+              <el-col v-for="item in messageList" :key="item.messageId">
+                <p v-if="item.userid===user.userid" style="text-align: right">
+                  <span class="msg">{{item.message}}</span>
+                  <span>  :{{item.username}}</span>
+                </p>
+                <p v-else style="text-align: left">
+                  <span>{{item.username}}:  </span>
+                  <span class="msg">{{item.message}}</span>
+                </p>
+
+              </el-col>
+            </el-row>
+            <el-row v-else>
+              暂无聊天记录
+            </el-row>
+            <el-input type="textarea" rows="2" v-model="message"></el-input>
+          </el-main>
+          <el-footer>
+            <el-button size="small" @click="sendMsg">确定</el-button>
+          </el-footer>
         </el-container>
       </template>
 
+      <!--未登录-->
       <el-form
           v-else
           :model="form"
@@ -40,18 +71,13 @@
 </template>
 
 <script lang="ts">
-import {defineComponent, computed, reactive, ref, toRefs, inject, onMounted} from 'vue'
-import {useStore} from "vuex";
-import {useRoute, useRouter} from "vue-router";
-import {useWebSocket} from "@vueuse/core";
-import {ElMessage} from "element-plus";
-
+import {defineComponent,  reactive, ref, toRefs,  onMounted} from 'vue'
 
 export default defineComponent({
 
   name: 'chat',
 
-  setup(props, ctx) {
+  setup() {
     interface IUser{
       username: string;
       userid: string;
@@ -63,7 +89,6 @@ export default defineComponent({
     }
 
     const formRef = ref<any>(null)
-    const router = useRouter()
     const state = reactive({
       // socket实例
       socket: null,
@@ -79,17 +104,13 @@ export default defineComponent({
       // 已连接用户数
       onlineCount: 0,
       // 用户集合
-      userList: new Map()
+      userList: new Map(),
+      // 消息
+      message: '',
+
+      messageList: []
     })
-    const login = ()=>{
-      if( state.form.username === '' ){
-          ElMessage.warning('请输入用户名!')
-      }
-      if( state.form.password === '' ){
-        ElMessage.warning('请输入密码!')
-      }
-      state.socket.emit('login', state.form);
-    }
+
     const logout = ()=>{
       state.socket.emit('logout', state.user);
     }
@@ -101,12 +122,13 @@ export default defineComponent({
         ...state.user,
         message: state.message
       });
+      state.message = ''
     }
     const initSocket = ()=>{
       let socket = io.connect('ws://localhost:3001');
       // 监听用户登录
       socket.on('login', (res:IRes)=>{
-        if( res.code === 1 ){
+        if( res.code === 1 && !state.user.userid){
           state.user = JSON.parse(res.data)
         }
       });
@@ -123,7 +145,7 @@ export default defineComponent({
       socket.on('message', (res:IRes)=>{
         if( res.code === 1 ){
           let data = JSON.parse(res.data)
-          debugger
+          state.messageList.push(data)
         }
       });
       // 监听连接
@@ -133,6 +155,9 @@ export default defineComponent({
       // 用户数更新
       socket.on('change-count', (res:IRes)=>{
         state.onlineCount = res.data
+      });
+      socket.on('change-users', (res:IRes)=>{
+        state.userList = res.data
       });
       state.socket = socket
     }
@@ -152,12 +177,22 @@ export default defineComponent({
     return {
       formRef,
       ...toRefs(state),
-      submit
+      submit,
+      logout,
+      sendMsg
     }
   }
 })
 </script>
 
 <style lang="scss" scoped>
-
+  li{
+    list-style: none;
+  }
+  .msg{
+    padding: 5px 10px;
+    border-radius: 20px;
+    background-color: #02CAB0;
+    color: #fff;
+  }
 </style>
