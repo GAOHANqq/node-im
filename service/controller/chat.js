@@ -2,11 +2,14 @@
 const md5 = require('md5-node')
 
 
-function getUuid(user){
+function getUserId(user){
     if( user.userid ){
         return user.userid
     }
     return md5(user.username+user.password)
+}
+function getUuid(){
+    return Math.random().toString(36).slice(2)
 }
 
 function getResult(){
@@ -22,6 +25,8 @@ function IO(server){
     this.connect_count = 0
     // 用户集合
     this.Users = new Map()
+    // 消息集合
+    this.Message = new Map()
     // io实例
     this.io = null
     // 实例
@@ -39,12 +44,14 @@ function IO(server){
         let result = getResult()
         result.data = this.Users.size
         this.io.emit('change-count', result);
+        this.sendUsers()
     }
     this.sendMessage = function(data){
         this.io.emit('message', data);
     }
     this.sendUsers = function(){
         let data = getResult()
+        data.data = [...this.Users.values()]
         this.io.emit('change-users', data);
     }
 
@@ -64,7 +71,7 @@ function IO(server){
             // 监听用户登录
             socket.on('login', function(user){
                 // 检查在线列表，如果不在里面就加入
-                user.userid = getUuid(user)
+                user.userid = getUserId(user)
                 if(!self.Users.has(user.userid)) {
                     self.Users.set(user.userid, user);
                 }
@@ -88,7 +95,18 @@ function IO(server){
             socket.on('message', function(data){
                 //向所有客户端广播发布的消息
                 let result = getResult()
-                result.data = JSON.stringify(data)
+                const {userid,username,message} = data
+                const dataItem = {
+                    timestamp: Date.now(),
+                    message,
+                    messageId: getUuid()
+                }
+                if( self.Message.has(userid) ){
+                    self.Message.set(userid,[...self.Message.get(userid),dataItem])
+                }else{
+                    self.Message.set(userid, [dataItem])
+                }
+                result.data = JSON.stringify({...dataItem, userid, username})
                 self.sendMessage(result);
             });
         });
